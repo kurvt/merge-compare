@@ -41,11 +41,10 @@ def load_from_json(raw_list: list) -> list:
             'repo':         item.get('repo', ''),
             'author':       item.get('owner', ''),
             'in_str':       bool(item.get('in_str', False)),
-            'time_str':     item.get('time_str', ''),
+            'updated':      item.get('updated', ''),
             'size':         item.get('size', '--'),
             'branch':       'bsp_REL1_CSP1_20260219',
         }
-        entry['time_dt'] = parse_time(entry['time_str'])
         result.append(entry)
     return result
 

@@ -11,13 +11,12 @@ from data_parser import load_from_json
 
 st.set_page_config(page_title="BSP-STR 合并对比", layout="wide")
 
-# 带颜色 emoji 的状态选项
 S_TODO    = "🔴 待确认"
 S_MERGED  = "🟢 STR已合入"
 S_INVALID = "🟡 重复/无效"
 STATUS_OPTIONS = [S_TODO, S_MERGED, S_INVALID]
 
-ROW_HEIGHT = 35  # data_editor 每行约 35px
+ROW_HEIGHT = 35
 
 # ────────────────────────────────────────────
 # 进程级共享状态
@@ -51,6 +50,8 @@ def build_rows(filters):
             continue
         if filters.get("ctype") and item.get("commit_type") != filters["ctype"]:
             continue
+        if filters.get("updated") and item.get("updated") != filters["updated"]:
+            continue
         idx = item["idx"]
         rows.append({
             "确认状态": get_status(idx, item.get("in_str", False)),
@@ -60,6 +61,7 @@ def build_rows(filters):
             "模块":    item.get("function", ""),
             "仓库":    item.get("repo", ""),
             "作者":    item.get("author", ""),
+            "时间":    item.get("updated", ""),
             "_idx":    idx,
         })
     return rows
@@ -82,10 +84,26 @@ with st.sidebar:
     ctypes = sorted({x.get("commit_type", "") for x in G["bsp"] if x.get("commit_type")})
     ctype_sel = st.selectbox("提交类型", ["全部"] + ctypes)
 
+    # 时间筛选 - 按时间倒序排列
+    def time_sort_key(t):
+        months = {'Jan':1,'Feb':2,'Mar':3,'Apr':4,'May':5,'Jun':6,
+                   'Jul':7,'Aug':8,'Sep':9,'Oct':10,'Nov':11,'Dec':12}
+        parts = t.split()
+        if len(parts) == 2 and parts[0] in months:
+            return (months[parts[0]], int(parts[1]))
+        return (0, 0)
+
+    times = sorted(
+        {x.get("updated", "") for x in G["bsp"] if x.get("updated")},
+        key=time_sort_key, reverse=True,
+    )
+    time_sel = st.selectbox("时间", ["全部"] + times)
+
     filters = {
-        "author": None if author_sel == "全部" else author_sel,
-        "repo":   None if repo_sel   == "全部" else repo_sel,
-        "ctype":  None if ctype_sel  == "全部" else ctype_sel,
+        "author":  None if author_sel == "全部" else author_sel,
+        "repo":    None if repo_sel   == "全部" else repo_sel,
+        "ctype":   None if ctype_sel  == "全部" else ctype_sel,
+        "updated": None if time_sel   == "全部" else time_sel,
     }
 
     if st.button("🗑️ 重置所有确认"):
@@ -115,23 +133,7 @@ with st.sidebar:
 
 
 # ────────────────────────────────────────────
-# 同步编辑
-# ────────────────────────────────────────────
-def sync_edits(editor_key, df):
-    if editor_key not in st.session_state:
-        return
-    edited = st.session_state[editor_key].get("edited_rows", {})
-    for row_str, changes in edited.items():
-        if "确认状态" in changes:
-            ri = int(row_str)
-            if ri < len(df):
-                idx = df.iloc[ri]["_idx"]
-                G["status"][idx] = changes["确认状态"]
-                G["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-# ────────────────────────────────────────────
-# 渲染表格：height 设为全展开，无内部滚动条
+# 渲染表格 + st.form 批量保存
 # ────────────────────────────────────────────
 def render_table(tab_key, show_filter, filters):
     all_rows = build_rows(filters)
@@ -149,30 +151,45 @@ def render_table(tab_key, show_filter, filters):
     df = pd.DataFrame(all_rows).reset_index(drop=True)
 
     editor_key = f"editor_{tab_key}"
-    sync_edits(editor_key, df)
-
-    # 计算高度：让表格完全展开，不产生内部滚动条
     table_height = (n_total + 1) * ROW_HEIGHT + 3
 
-    st.data_editor(
-        df.drop(columns=["_idx"]),
-        column_config={
-            "确认状态": st.column_config.SelectboxColumn(
-                "确认状态", options=STATUS_OPTIONS, width="small", required=True,
-            ),
-            "JIRA":  st.column_config.TextColumn("JIRA",  width="small"),
-            "主题":  st.column_config.TextColumn("主题",  width="large"),
-            "类型":  st.column_config.TextColumn("类型",  width="small"),
-            "模块":  st.column_config.TextColumn("模块",  width="small"),
-            "仓库":  st.column_config.TextColumn("仓库",  width="medium"),
-            "作者":  st.column_config.TextColumn("作者",  width="small"),
-        },
-        disabled=["JIRA", "主题", "类型", "模块", "仓库", "作者"],
-        use_container_width=True,
-        hide_index=True,
-        height=table_height,
-        key=editor_key,
-    )
+    with st.form(key=f"form_{tab_key}"):
+        edited = st.data_editor(
+            df.drop(columns=["_idx"]),
+            column_config={
+                "确认状态": st.column_config.SelectboxColumn(
+                    "确认状态", options=STATUS_OPTIONS, width="small", required=True,
+                ),
+                "JIRA":  st.column_config.TextColumn("JIRA",  width="small"),
+                "主题":  st.column_config.TextColumn("主题",  width="large"),
+                "类型":  st.column_config.TextColumn("类型",  width="small"),
+                "模块":  st.column_config.TextColumn("模块",  width="small"),
+                "仓库":  st.column_config.TextColumn("仓库",  width="medium"),
+                "作者":  st.column_config.TextColumn("作者",  width="small"),
+                "时间":  st.column_config.TextColumn("时间",  width="small"),
+            },
+            disabled=["JIRA", "主题", "类型", "模块", "仓库", "作者", "时间"],
+            use_container_width=True,
+            hide_index=True,
+            height=table_height,
+            key=editor_key,
+        )
+        submitted = st.form_submit_button("💾 保存所有修改", use_container_width=True, type="primary")
+
+    if submitted:
+        n_changed = 0
+        for i, row in edited.iterrows():
+            idx = df.iloc[i]["_idx"]
+            new_val = row["确认状态"]
+            old_val = df.iloc[i]["确认状态"]
+            if new_val != old_val:
+                G["status"][idx] = new_val
+                n_changed += 1
+        if n_changed > 0:
+            G["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.success(f"已保存 {n_changed} 条修改")
+        else:
+            st.info("没有需要保存的修改")
 
 
 # ────────────────────────────────────────────
