@@ -78,20 +78,42 @@ def parse_raw_text(raw: str) -> list:
             continue
 
         # 管道分隔格式
+        # Subject 内部可能含有 | 字符（如"开机优化|取消preload"），
+        # 用 branch 字段（固定以 bsp_ 开头）作为锚点，向两侧定位各字段，
+        # 这样无论 Subject 里有多少个 | 都不会错位。
         if '|' in line:
-            parts = [p.strip() for p in line.split('|')]
-            if len(parts) < 6:
+            all_parts = [p.strip() for p in line.split('|')]
+
+            # 找到 branch 字段的索引（值以 bsp_ 开头）
+            branch_idx = None
+            for i, p in enumerate(all_parts):
+                if p.startswith('bsp_'):
+                    branch_idx = i
+                    break
+
+            if branch_idx is None or branch_idx < 3:
                 continue
-            full_text = parts[0]
+
+            # full_text = branch 左侧 3 个字段前的所有内容重新拼回
+            full_text = '|'.join(all_parts[:branch_idx - 3])
+
+            author    = all_parts[branch_idx - 3]
+            reviewers = all_parts[branch_idx - 2]
+            repo      = all_parts[branch_idx - 1]
+            branch    = all_parts[branch_idx]
+            time_str  = all_parts[branch_idx + 1] if branch_idx + 1 < len(all_parts) else ''
+            size      = all_parts[branch_idx + 2] if branch_idx + 2 < len(all_parts) else '--'
+            status    = all_parts[branch_idx + 3] if branch_idx + 3 < len(all_parts) else 'Merged'
+
             parsed = parse_entry(full_text)
             parsed.update({
-                'author': parts[1] if len(parts) > 1 else '',
-                'reviewers': parts[2] if len(parts) > 2 else '',
-                'repo': parts[3] if len(parts) > 3 else '',
-                'branch': parts[4] if len(parts) > 4 else '',
-                'time_str': parts[5] if len(parts) > 5 else '',
-                'size': parts[6] if len(parts) > 6 else '--',
-                'status': parts[7] if len(parts) > 7 else 'Merged',
+                'author': author,
+                'reviewers': reviewers,
+                'repo': repo,
+                'branch': branch,
+                'time_str': time_str,
+                'size': size,
+                'status': status,
             })
             parsed['time_dt'] = parse_time(parsed['time_str'])
             entries.append(parsed)
