@@ -21,8 +21,10 @@ ROW_HEIGHT = 35
 # ────────────────────────────────────────────
 # 进程级共享状态
 # ────────────────────────────────────────────
+DATA_VERSION = 2  # bump to force cache refresh on deploy
+
 @st.cache_resource
-def get_global_state():
+def get_global_state(_version=DATA_VERSION):
     bsp = load_from_json(BSP_DATA)
     status = {}
     for item in bsp:
