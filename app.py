@@ -189,9 +189,7 @@ def render_table(tab_key, show_filter, filters):
                 n_changed += 1
         if n_changed > 0:
             G["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.success(f"已保存 {n_changed} 条修改")
-        else:
-            st.info("没有需要保存的修改")
+            st.rerun()
 
 
 # ────────────────────────────────────────────
