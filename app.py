@@ -108,13 +108,6 @@ with st.sidebar:
         "updated": None if time_sel   == "全部" else time_sel,
     }
 
-    if st.button("🗑️ 重置所有确认"):
-        G["status"].clear()
-        for item in G["bsp"]:
-            if item.get("in_str"):
-                G["status"][item["idx"]] = S_MERGED
-        st.rerun()
-
     st.divider()
     total    = len(G["bsp"])
     n_merged = sum(1 for x in G["bsp"] if get_status(x["idx"], x.get("in_str", False)) == S_MERGED)
